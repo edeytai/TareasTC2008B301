@@ -63,5 +63,5 @@ page = SolaraViz(
     gof_model,
     components=[space_component],
     model_params=model_params,
-    name="Simulación 1 — Regla 90",
+    name="Simulación 1",
 )
