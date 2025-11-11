@@ -1,0 +1,14 @@
+{
+  "name": "cg-1-face-transforms",
+  "version": "1.0.0",
+  "description": "WebGL2 2D Face with Transformations",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

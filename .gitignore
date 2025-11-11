@@ -87,6 +87,25 @@ logs/
 .env.local
 .env.*.local
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+package-lock.json
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css
+
+# Cache directories
+.cache/
+.parcel-cache/
+
 # Project specific
 *.sqlite3
 *.db
