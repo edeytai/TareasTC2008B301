@@ -1,19 +1,10 @@
 from mesa import Model
+from mesa.datacollection import DataCollector
 from mesa.discrete_space import OrthogonalMooreGrid
 
 from .agent import CleaningAgent, ChargingStation, DirtyCell, ObstacleAgent
 
 class RoombaCleaningModel(Model):
-    """
-    Creates a new model for roomba cleaning simulation.
-    Args:
-        width: The width of the grid
-        height: The height of the grid
-        num_dirty_cells: Number of dirty cells to place initially
-        num_obstacles: Number of obstacles to place
-        max_steps: Maximum number of steps for the simulation
-        seed: Random seed for reproducibility
-    """
     def __init__(self, width=25, height=25, num_dirty_cells=50, num_obstacles=20, max_steps=1000, seed=42):
         super().__init__(seed=seed)
 
@@ -56,7 +47,18 @@ class RoombaCleaningModel(Model):
         # Crear el agente de limpieza en la posición (1, 1) - mismo lugar que la estación
         self.cleaning_agent = CleaningAgent(self, cell=charging_cell, home_station=charging_cell)
 
+        # Set up data collection
+        model_reporters = {
+            "Dirty Cells": lambda m: m.dirty_cells_count,
+            "Battery": lambda m: m.cleaning_agent.battery,
+        }
+
+        self.datacollector = DataCollector(model_reporters)
+
         self.running = True
+
+        # Collect initial data
+        self.datacollector.collect(self)
 
     def step(self):
         """
@@ -85,4 +87,7 @@ class RoombaCleaningModel(Model):
         # Verificar si el agente se quedó sin batería y no puede regresar
         if self.cleaning_agent.battery <= 0 and not self.cleaning_agent.is_at_station():
             self.running = False
+
+        # Collect data
+        self.datacollector.collect(self)
 

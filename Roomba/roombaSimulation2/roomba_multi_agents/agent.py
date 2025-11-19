@@ -33,11 +33,13 @@ class CleaningAgent(CellAgent):
 
     def charge_battery(self):
         """
-        Charges the battery by 5% per step when at ANY charging station.
+        Charges the battery by 5% per step when at a charging station OCCUPIED by this agent.
         Patrón de wolfSheep.Sheep.feed()
         Similar a: if grass_patch.fully_grown: self.energy += self.energy_from_food
         """
-        if self.is_at_any_station() and self.battery < 100:
+        station = self.get_current_station()
+        # Solo cargar si estamos en una estación Y somos quienes la ocupan
+        if station and station.occupied_by == self and self.battery < 100:
             self.battery = min(100, self.battery + 5)  # Recarga 5% como Sheep come grass
             self.charging = True
         else:
@@ -62,28 +64,32 @@ class CleaningAgent(CellAgent):
 
     def find_nearest_station(self):
         """
-        Uses BFS to find the nearest charging station (ANY station, not just home).
-        Returns the cell containing the nearest station.
+        Uses BFS to find the nearest AVAILABLE charging station (not occupied by another agent).
+        Returns the cell containing the nearest available station.
         BFS de wolfSheep para encontrar recursos
         Similar a cómo Sheep busca GrassPatch más cercano
         """
         from collections import deque
 
-        # BFS para encontrar la estación más cercana
+        # BFS para encontrar la estación más cercana disponible
         queue = deque([(self.cell, 0)])  # (celda, distancia)
         visited = {self.cell}
 
         while queue:
             current, distance = queue.popleft()
 
-            # Verificar si esta celda tiene una estación de carga
+            # Verificar si esta celda tiene una estación de carga disponible
             stations = [agent for agent in current.agents if isinstance(agent, ChargingStation)]
             if stations:
-                return current  # Retorna la celda con la estación más cercana
+                station = stations[0]
+                # Solo retornar si la estación está disponible o ya está ocupada por este agente
+                if station.is_available() or station.occupied_by == self:
+                    return current  # Retorna la celda con la estación más cercana disponible
 
-            # Explorar vecinos (evitando obstáculos)
+            # Explorar vecinos (evitando obstáculos y estaciones ocupadas por otros)
             neighbors = current.neighborhood.select(
-                lambda cell: not any(isinstance(agent, ObstacleAgent) for agent in cell.agents)
+                lambda cell: not any(isinstance(agent, ObstacleAgent) for agent in cell.agents) and
+                            not self.is_station_occupied_by_other(cell)
             )
 
             for neighbor in neighbors.cells:
@@ -91,12 +97,13 @@ class CleaningAgent(CellAgent):
                     visited.add(neighbor)
                     queue.append((neighbor, distance + 1))
 
-        return None  # No se encontró ninguna estación
+        return None  # No se encontró ninguna estación disponible
 
     def find_path_to_station(self):
         """
         Uses BFS to find shortest path to nearest charging station.
         Returns list of cells representing the path.
+        Avoids cells with stations occupied by other agents.
         """
         # Primero encuentra la estación más cercana
         nearest_station_cell = self.find_nearest_station()
@@ -118,9 +125,10 @@ class CleaningAgent(CellAgent):
             if current == nearest_station_cell:
                 return path[1:]  # Excluir la celda actual
 
-            # Explorar vecinos
+            # Explorar vecinos (evitando obstáculos y estaciones ocupadas por otros)
             neighbors = current.neighborhood.select(
-                lambda cell: not any(isinstance(agent, ObstacleAgent) for agent in cell.agents)
+                lambda cell: not any(isinstance(agent, ObstacleAgent) for agent in cell.agents) and
+                            (cell == nearest_station_cell or not self.is_station_occupied_by_other(cell))
             )
 
             for neighbor in neighbors.cells:
@@ -135,14 +143,42 @@ class CleaningAgent(CellAgent):
         Moves one step towards the nearest charging station following the calculated path.
         Returns True if movement was successful.
         """
+        # Verificar si tenemos una estación objetivo y si aún está disponible
+        if self.target_station:
+            stations = [agent for agent in self.target_station.agents if isinstance(agent, ChargingStation)]
+            if stations:
+                station = stations[0]
+                # Si la estación objetivo está ocupada por otro, recalcular path
+                if station.occupied_by is not None and station.occupied_by != self:
+                    self.path_to_station = []
+                    self.target_station = None
+
         if not self.path_to_station:
             self.path_to_station = self.find_path_to_station()
 
         if self.path_to_station and self.battery > 0:
-            next_cell = self.path_to_station.pop(0)
+            # Verificar la siguiente celda antes de moverse
+            next_cell = self.path_to_station[0]  # Peek sin remover
+
+            # Si la siguiente celda tiene una estación ocupada por otro, recalcular path
+            if self.is_station_occupied_by_other(next_cell):
+                self.path_to_station = []
+                self.target_station = None
+                return False
+
+            # Liberar estación actual si estamos en una
+            self.release_current_station()
+
+            # Ahora sí moverse
+            self.path_to_station.pop(0)
             self.cell = next_cell
             self.battery -= 1  # Consumir 1% por moverse
             self.movements += 1
+
+            # Si llegamos a la estación objetivo, intentar ocuparla
+            if self.is_at_any_station():
+                self.occupy_current_station()
+
             return True
         return False
 
@@ -155,10 +191,15 @@ class CleaningAgent(CellAgent):
         if self.battery <= 0:
             return False
 
+        # Liberar estación actual si estamos en una antes de moverse
+        self.release_current_station()
+
         # Buscar celdas vecinas con suciedad (como Sheep busca grass)
+        # Evitar obstáculos, otros agentes, y estaciones ocupadas por otros
         dirty_neighbors = self.cell.neighborhood.select(
             lambda cell: any(isinstance(agent, DirtyCell) for agent in cell.agents) and
-                        not any(isinstance(agent, (ObstacleAgent, CleaningAgent)) for agent in cell.agents)
+                        not any(isinstance(agent, (ObstacleAgent, CleaningAgent)) for agent in cell.agents) and
+                        not self.is_station_occupied_by_other(cell)
         )
 
         if dirty_neighbors.cells:
@@ -169,8 +210,10 @@ class CleaningAgent(CellAgent):
             return True
         else:
             # No hay celdas sucias cerca, moverse aleatoriamente (patrón de randomAgents)
+            # Evitar obstáculos, otros agentes, y estaciones ocupadas por otros
             empty_neighbors = self.cell.neighborhood.select(
-                lambda cell: not any(isinstance(agent, (ObstacleAgent, CleaningAgent)) for agent in cell.agents)
+                lambda cell: not any(isinstance(agent, (ObstacleAgent, CleaningAgent)) for agent in cell.agents) and
+                            not self.is_station_occupied_by_other(cell)
             )
 
             if empty_neighbors.cells:
@@ -180,6 +223,39 @@ class CleaningAgent(CellAgent):
                 return True
 
         return False
+
+    def get_current_station(self):
+        """
+        Returns the charging station at the current cell, if any.
+        """
+        stations = [agent for agent in self.cell.agents if isinstance(agent, ChargingStation)]
+        return stations[0] if stations else None
+
+    def is_station_occupied_by_other(self, cell):
+        """
+        Checks if a cell has a charging station occupied by another agent.
+        """
+        stations = [agent for agent in cell.agents if isinstance(agent, ChargingStation)]
+        if stations:
+            station = stations[0]
+            return station.occupied_by is not None and station.occupied_by != self
+        return False
+
+    def occupy_current_station(self):
+        """
+        Occupies the charging station at the current cell.
+        """
+        station = self.get_current_station()
+        if station and station.is_available():
+            station.occupy(self)
+
+    def release_current_station(self):
+        """
+        Releases the charging station at the current cell if occupied by this agent.
+        """
+        station = self.get_current_station()
+        if station and station.occupied_by == self:
+            station.release()
 
     def step(self):
         """
@@ -191,8 +267,14 @@ class CleaningAgent(CellAgent):
         """
         # Si está en cualquier estación y la batería no está llena, cargar
         if self.is_at_any_station() and self.battery < 100:
+            # Ocupar la estación si no está ocupada
+            self.occupy_current_station()
             self.charge_battery()
             return
+
+        # Si la batería está llena y está en una estación, liberarla antes de salir
+        if self.is_at_any_station() and self.battery >= 100:
+            self.release_current_station()
 
         # Si la batería está baja, regresar a cargar
         if self.needs_charging():
@@ -221,6 +303,25 @@ class ChargingStation(FixedAgent):
         """
         super().__init__(model)
         self.cell = cell
+        self.occupied_by = None  # Referencia al agente que ocupa la estación
+
+    def is_available(self):
+        """
+        Checks if the charging station is available (not occupied).
+        """
+        return self.occupied_by is None
+
+    def occupy(self, agent):
+        """
+        Marks the station as occupied by a specific agent.
+        """
+        self.occupied_by = agent
+
+    def release(self):
+        """
+        Releases the station, marking it as available.
+        """
+        self.occupied_by = None
 
     def step(self):
         pass

@@ -1,21 +1,10 @@
 from mesa import Model
+from mesa.datacollection import DataCollector
 from mesa.discrete_space import OrthogonalMooreGrid
 
 from .agent import CleaningAgent, ChargingStation, DirtyCell, ObstacleAgent
 
 class RoombaMultiAgentModel(Model):
-    """
-    Creates a new model for roomba cleaning simulation with multiple agents.
-    Estructura de wolfSheep para múltiples agentes del mismo tipo
-    Args:
-        width: The width of the grid
-        height: The height of the grid
-        num_agents: Number of cleaning agents (and charging stations)
-        num_dirty_cells: Number of dirty cells to place initially
-        num_obstacles: Number of obstacles to place
-        max_steps: Maximum number of steps for the simulation
-        seed: Random seed for reproducibility
-    """
     def __init__(self, num_agents=5, width=25, height=25, num_dirty_cells=100, num_obstacles=20, max_steps=2000, seed=42):
         super().__init__(seed=seed)
 
@@ -74,7 +63,18 @@ class RoombaMultiAgentModel(Model):
             agent = CleaningAgent(self, cell=cell, home_station=cell)
             self.cleaning_agents.append(agent)
 
+        # Set up data collection
+        model_reporters = {
+            "Cleaning Agents": lambda m: len(m.cleaning_agents),
+            "Dirty Cells": lambda m: m.dirty_cells_count,
+        }
+
+        self.datacollector = DataCollector(model_reporters)
+
         self.running = True
+
+        # Collect initial data
+        self.datacollector.collect(self)
 
     def step(self):
         """
@@ -109,3 +109,6 @@ class RoombaMultiAgentModel(Model):
         )
         if all_agents_dead:
             self.running = False
+
+        # Collect data
+        self.datacollector.collect(self)

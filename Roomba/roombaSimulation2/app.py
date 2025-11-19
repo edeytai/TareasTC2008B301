@@ -5,6 +5,7 @@ from mesa.visualization import (
     Slider,
     SolaraViz,
     make_space_component,
+    make_plot_component,
 )
 
 from mesa.visualization.components import AgentPortrayalStyle
@@ -12,7 +13,7 @@ from mesa.visualization.components import AgentPortrayalStyle
 def roomba_portrayal(agent):
     """
     Defines how each agent is portrayed in the visualization.
-    🔄 REUTILIZADO: Estructura de randomAgents.random_portrayal
+    Estructura de randomAgents.random_portrayal
     """
     if agent is None:
         return
@@ -52,11 +53,21 @@ def roomba_portrayal(agent):
 def post_process(ax):
     """
     Post-processing of the visualization to maintain aspect ratio.
-    🔄 REUTILIZADO: De randomAgents
     """
     ax.set_aspect("equal")
 
-# 🔄 REUTILIZADO: Configuración de parámetros de randomAgents y wolfSheep
+def post_process_lines(ax):
+    """
+    Post-processing for line plots (patrón de wolfSheep)
+    """
+    ax.legend(loc="center left", bbox_to_anchor=(1, 0.9))
+
+lineplot_component = make_plot_component(
+    {"Cleaning Agents": "tab:green", "Dirty Cells": "tab:brown"},
+    post_process=post_process_lines,
+)
+
+# Configuración de parámetros de randomAgents y wolfSheep
 model_params = {
     "seed": {
         "type": "InputText",
@@ -72,7 +83,7 @@ model_params = {
 }
 
 # Create the model using the initial parameters from the settings
-# 🔄 REUTILIZADO: Patrón de randomAgents y wolfSheep
+# Patrón de randomAgents y wolfSheep
 model = RoombaMultiAgentModel(
     num_agents=model_params["num_agents"].value,
     width=model_params["width"].value,
@@ -91,7 +102,7 @@ space_component = make_space_component(
 
 page = SolaraViz(
     model,
-    components=[space_component],
+    components=[space_component, lineplot_component],
     model_params=model_params,
     name="Roomba Cleaning Simulation - Multiple Agents",
 )

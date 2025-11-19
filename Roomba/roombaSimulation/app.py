@@ -5,6 +5,7 @@ from mesa.visualization import (
     Slider,
     SolaraViz,
     make_space_component,
+    make_plot_component,
 )
 
 from mesa.visualization.components import AgentPortrayalStyle
@@ -54,6 +55,17 @@ def post_process(ax):
     """
     ax.set_aspect("equal")
 
+def post_process_lines(ax):
+    """
+    Post-processing for line plots
+    """
+    ax.legend(loc="center left", bbox_to_anchor=(1, 0.9))
+
+lineplot_component = make_plot_component(
+    {"Dirty Cells": "tab:brown", "Battery": "tab:green"},
+    post_process=post_process_lines,
+)
+
 model_params = {
     "seed": {
         "type": "InputText",
@@ -85,7 +97,7 @@ space_component = make_space_component(
 
 page = SolaraViz(
     model,
-    components=[space_component],
+    components=[space_component, lineplot_component],
     model_params=model_params,
     name="Roomba Cleaning Simulation - Single Agent",
 )
